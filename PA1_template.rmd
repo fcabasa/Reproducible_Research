@@ -1,0 +1,176 @@
+---
+title: 'Reproducible Reseach:  Class Project 1'
+author: "Frederick Cabasa"
+date: "July 2, 2017"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+## Introduction
+
+It is now possible to collect a large amount of data about personal movement using activity
+monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are 
+part of the “quantified self” movement – a group of enthusiasts who take measurements about 
+themselves regularly to improve their health, to find patterns in their behavior, or because 
+they are tech geeks. But these data remain under-utilized both because the raw data are hard 
+to obtain and there is a lack of statistical methods and software for processing and 
+interpreting the data.
+
+
+## Overview
+
+This assignment makes use of data from a personal activity monitoring device. This device 
+collects data at 5 minute intervals through out the day. The data consists of two months of 
+data from an anonymous individual collected during the months of October and November, 2012 
+and include the number of steps taken in 5 minute intervals each day.
+
+The variables in the dataset are:
+
+* steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+* date: The date on which the measurement was taken in YYYY-MM-DD format
+* interval: Identifier for the 5-minute interval in which measurement was taken
+
+
+#### 1. Code for reading in the dataset and/or processing the data
+The following code sets up the working directory and creates the csv r object.
+
+```{r, echo=TRUE}
+library(knitr)
+library(ggplot2)
+library(dplyr)
+
+temp <- tempfile()
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip", temp, mode="wb")
+unzip(temp,"activity.csv")
+```
+```{r, echo=TRUE}
+activitydata <- read.csv("activity.csv", header=T)
+activitydata$date <- as.Date(activitydata$date)
+```
+
+
+#### 2. Histogram of the total number of steps taken each day 
+
+Missing values were included to show magnitude of NA values in dataset.
+The total number of steps per day were calculated in the TotalStepsPerDay data frame.
+
+```{r, echo=TRUE}
+TotalStepsPerDay <- aggregate(activitydata$steps, list(date=activitydata$date), FUN = sum, na.rm=TRUE)
+```
+
+A histogram of the various total number of steps per day values was constructed to show the magnitude of total steps.
+The NA value was shown to show the number of times/days that no steps were recorded.
+
+```{r, echo=TRUE}
+hist(TotalStepsPerDay$x,
+      main="Frequency Of Total Steps Per Day",
+      xlab = "Total Steps Per Day",
+      ylab = "Number of Days",
+      col = "Dark Green",
+      breaks = 25)
+```
+
+
+#### 3) Mean and median number of steps taken each day
+
+```{r, echo=TRUE}
+paste("Mean Steps per Day =", round(mean(TotalStepsPerDay$x, na.rm=TRUE),1))
+paste("Median Steps per Day =", round(median(TotalStepsPerDay$x, na.rm=TRUE),1)) 
+```
+
+
+#### 4) Time series plot of the average number of steps taken
+
+We will load the ggplot and plyr libraries to use the ggplot graph and dplyr functionality.
+
+```{r, echo=TRUE}
+library(ggplot2)
+library(plyr)
+AvgStepsPerInterval <- ddply(activitydata, "interval", summarize, avg=mean(steps,na.rm=TRUE))
+
+ggplot(AvgStepsPerInterval, aes(x=interval, y = avg, group = 1))+
+    labs(title="Average Steps per Interval")+
+    labs(x="5 Minute Interval", y="Average Number of Steps")+
+    geom_line(colour="Dark Orange")
+```
+
+
+
+#### 5) The 5-minute interval that, on average, contains the maximum number of steps
+
+```{r, echo=TRUE}
+MaxNumSteps <- AvgStepsPerInterval$interval[which.max(AvgStepsPerInterval$avg)]
+paste("The Interval With The Maximum Value is", MaxNumSteps)
+MaxIntMean <- max(AvgStepsPerInterval$avg)
+paste("The Maximum Interval Mean Steps is", round(MaxIntMean,1))
+```
+
+
+#### 6) Code to describe and show a strategy for imputing missing data
+
+Missing Data Imputation Strategy:
+
+A) Calculate the total number of missing values in proportion to the data set
+
+```{r, echo=TRUE}
+missing <- sum(is.na(activitydata))
+n <- nrow(activitydata)
+proportion <- round(missing/n*100, 1)
+paste ("The total number of missing values is", missing, "which translates to", proportion, "% of the dataset.")
+```
+
+B) Create a new imputed dataset that replaces the missing values with the mean of the 5-minute interval
+
+```{r, echo=TRUE}
+activitydata.imputed <- ifelse(is.na(activitydata$steps), round(AvgStepsPerInterval$avg[match(activitydata$interval, 
+                        AvgStepsPerInterval$interval)],0), activitydata$steps)
+
+activitydata2 <- data.frame(steps=activitydata.imputed, interval=activitydata$interval, date=activitydata$date)
+
+TotalStepsPerDayImputed <- aggregate(activitydata2$steps, list(activitydata2$date), FUN=sum)
+colnames(TotalStepsPerDayImputed)[1] <- c("date")
+```
+
+C) Recreate histogram and numbers using imputed dataset as in step 7:
+
+
+#### 7) Histogram of the total number of steps taken each day after missing values are imputed
+
+```{r}
+hist(TotalStepsPerDayImputed$x,
+     main="Frequency Of Total Steps Per Day (with imputed values)",
+     xlab = "Total Steps Per Day",
+     ylab = "Number of Days",
+     col = "Dark Green",
+     breaks = 25)
+```
+
+
+We definitely see a significant drop of the 0-1000 size bin with all of the NA values imputed with the average values per interval.
+Thus, we see an increase around the center of the histogram to account for the imputation strategy.
+
+```{r, echo=TRUE}
+paste("Mean Steps per Day =", round(mean(TotalStepsPerDayImputed$x, na.rm=TRUE),1))
+paste("Median Steps per Day =", round(median(TotalStepsPerDayImputed$x, na.rm=TRUE),1))
+```
+
+
+#### 8) Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends
+
+```{r, echo=TRUE}
+weekdays <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+activitydata2$weekday <- weekdays(activitydata2$date)
+activitydata2$weektype <- as.factor(ifelse(is.element(weekdays(as.Date(activitydata2$date)), weekdays), "Weekday", "Weekend"))
+
+AvgStepsPerIntervalWvW <- aggregate(steps~interval+weektype, data=activitydata2, FUN=mean, na.action=na.omit)
+AvgStepsPerIntervalWvW$time <- AvgStepsPerInterval$interval/100
+
+ggplot(AvgStepsPerIntervalWvW, aes(x=interval, y = steps, color=weektype))+
+  labs(title="Average Steps per Interval (week type)")+
+  labs(x="5 Minute Interval", y="Average Number of Steps")+
+  geom_line()+facet_wrap( ~weektype, ncol=1, nrow=2)
+```
+
+
